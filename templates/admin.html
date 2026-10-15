@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel dos Médicos | Senai Tech Cardiologia</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Ícones Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body>
+
+  <!-- ========================================================================
+       TELA 1: LOGIN DO CORPO CLÍNICO
+       ======================================================================== -->
+  <section class="login-wrapper" id="loginWrapper">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="clinic-logo">
+          <i class="fa-solid fa-heart-pulse"></i>
+        </div>
+        <h2>Senai Tech</h2>
+        <p class="subtitle">Portal Exclusivo do Corpo Clínico</p>
+      </div>
+
+      <div class="alert-box alert-error" id="loginError" style="display: none;">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span id="loginErrorMsg">Credenciais inválidas.</span>
+      </div>
+
+      <form id="loginForm" class="login-form">
+        <div class="form-group">
+          <label for="selectMedico"><i class="fa-solid fa-user-doctor"></i> Selecione o Médico</label>
+          <select id="selectMedico" required>
+            <option value="" disabled selected>Selecione seu nome...</option>
+            <option value="Dr. Clark">Dr. Clark (Cardiologista)</option>
+            <option value="Dr. Jorge">Dr. Jorge (Cardiologista)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="inputSenha"><i class="fa-solid fa-key"></i> Senha de Acesso</label>
+          <div class="password-input-wrapper">
+            <input 
+              type="password" 
+              id="inputSenha" 
+              placeholder="Digite sua senha (1234)" 
+              required
+            />
+            <button type="button" class="btn-toggle-pass" id="btnTogglePass">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+          <small class="helper-text">Senha padrão para homologação: <code>1234</code></small>
+        </div>
+
+        <button type="submit" class="btn-primary btn-block" id="btnLogin">
+          <span>Acessar Painel</span>
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </form>
+
+      <div class="login-footer">
+        <a href="/" class="back-link">
+          <i class="fa-solid fa-arrow-left"></i> Voltar ao Atendimento / Chatbot
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       TELA 2: DASHBOARD MÉDICO (EXIBIDA APÓS O LOGIN)
+       ======================================================================== -->
+  <section class="dashboard-wrapper" id="dashboardWrapper" style="display: none;">
+    
+    <!-- Topbar Corporativa -->
+    <header class="admin-topbar">
+      <div class="topbar-brand">
+        <div class="brand-icon"><i class="fa-solid fa-heart-pulse"></i></div>
+        <div class="brand-text">
+          <h1>Senai Tech</h1>
+          <span>Gestão Cardiológica</span>
+        </div>
+      </div>
+
+      <div class="topbar-user">
+        <div class="user-avatar">
+          <i class="fa-solid fa-user-md"></i>
+        </div>
+        <div class="user-details">
+          <span class="user-name" id="medicoNomeDisplay">Dr. Carregando...</span>
+          <span class="user-role">Cardiologista Responsável</span>
+        </div>
+        <button class="btn-logout" id="btnLogout" title="Encerrar sessão">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Sair</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="dashboard-content">
+      
+      <!-- Cabeçalho de Boas-Vindas e Ações Rápidas -->
+      <div class="dashboard-header-row">
+        <div>
+          <h2 class="page-title">Agenda de Consultas</h2>
+          <p class="page-subtitle" id="dataExtensoDisplay">Acompanhe as consultas marcadas para hoje</p>
+        </div>
+        
+        <div class="header-actions">
+          <a href="/" target="_blank" class="btn-secondary" title="Abrir Chatbot da Paciente">
+            <i class="fa-solid fa-robot"></i> Chatbot Anna
+          </a>
+          <button class="btn-secondary" id="btnAtualizar" title="Atualizar dados agora">
+            <i class="fa-solid fa-arrows-rotate"></i> Atualizar
+          </button>
+        </div>
+      </div>
+
+      <!-- Cards de Métricas e Resumo -->
+      <div class="metrics-grid">
+        <div class="metric-card metric-total">
+          <div class="metric-icon"><i class="fa-solid fa-clipboard-list"></i></div>
+          <div class="metric-data">
+            <span class="metric-label">Total de Consultas</span>
+            <span class="metric-value" id="statTotal">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card metric-agendadas">
+          <div class="metric-icon"><i class="fa-regular fa-clock"></i></div>
+          <div class="metric-data">
+            <span class="metric-label">Agendadas</span>
+            <span class="metric-value" id="statAgendadas">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card metric-realizadas">
+          <div class="metric-icon"><i class="fa-solid fa-circle-check"></i></div>
+          <div class="metric-data">
+            <span class="metric-label">Realizadas</span>
+            <span class="metric-value" id="statRealizadas">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card metric-canceladas">
+          <div class="metric-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+          <div class="metric-data">
+            <span class="metric-label">Canceladas</span>
+            <span class="metric-value" id="statCanceladas">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros e Seleção de Data -->
+      <div class="filters-card">
+        <div class="filters-left">
+          <label for="filtroData"><i class="fa-regular fa-calendar"></i> Filtrar por Data:</label>
+          <div class="date-input-group">
+            <input type="date" id="filtroData">
+            <button class="btn-tag active" id="btnFiltroHoje">Hoje</button>
+            <button class="btn-tag" id="btnFiltroAmanha">Amanhã</button>
+            <button class="btn-tag" id="btnFiltroTodas">Todas</button>
+          </div>
+        </div>
+
+        <div class="filters-right">
+          <label for="filtroStatus"><i class="fa-solid fa-filter"></i> Status:</label>
+          <select id="filtroStatus">
+            <option value="Todas">Todas</option>
+            <option value="Agendada" selected>Apenas Agendadas</option>
+            <option value="Realizada">Realizadas</option>
+            <option value="Cancelada">Canceladas</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tabela Responsiva de Consultas -->
+      <div class="table-card">
+        <div class="table-responsive">
+          <table class="consultas-table">
+            <thead>
+              <tr>
+                <th>Horário</th>
+                <th>Paciente</th>
+                <th>CPF</th>
+                <th>Data Nasc.</th>
+                <th>Data</th>
+                <th>Status</th>
+                <th class="text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="consultasTableBody">
+              <!-- Linhas geradas dinamicamente via admin.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Estado Vazio (Sem Consultas) -->
+        <div class="empty-state" id="emptyState" style="display: none;">
+          <div class="empty-icon"><i class="fa-regular fa-calendar-check"></i></div>
+          <h3>Nenhuma consulta encontrada</h3>
+          <p>Não há consultas com os filtros selecionados para este médico.</p>
+        </div>
+      </div>
+
+    </main>
+  </section>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,484 @@
+/* ==========================================================================
+   Estilização Chat WhatsApp - Anna (Secretária Virtual | Senai Tech)
+   ========================================================================== */
+
+:root {
+  --wa-teal: #008069;
+  --wa-teal-dark: #075e54;
+  --wa-teal-light: #128c7e;
+  --wa-teal-accent: #25d366;
+  --wa-bg-chat: #efeae2;
+  --wa-bubble-bot: #ffffff;
+  --wa-bubble-user: #d9fdd3;
+  --wa-text-primary: #111b21;
+  --wa-text-secondary: #667781;
+  --wa-time-color: #667781;
+  --wa-tick-blue: #53bdeb;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --shadow-sm: 0 1px 2px rgba(11, 20, 26, 0.1);
+  --shadow-md: 0 4px 12px rgba(11, 20, 26, 0.15);
+  --radius-bubble: 8px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: #d1d7db;
+  color: var(--wa-text-primary);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-image: linear-gradient(180deg, #00a884 0%, #00a884 120px, #eae6df 120px, #eae6df 100%);
+}
+
+/* Wrapper do Chat no Desktop */
+.whatsapp-wrapper {
+  width: 100%;
+  max-width: 900px;
+  height: 92vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--wa-bg-chat);
+}
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+/* ==========================================================================
+   Cabeçalho (Header)
+   ========================================================================== */
+.chat-header {
+  background-color: var(--wa-teal);
+  color: #ffffff;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatar-container {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.avatar-badge {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%);
+  color: var(--wa-teal);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 12px;
+  height: 12px;
+  background-color: #25d366;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+}
+
+.header-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.header-status {
+  font-size: 0.8rem;
+  color: #e1f5fe;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background-color: #25d366;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-portal-medico {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-portal-medico:hover {
+  background-color: #ffffff;
+  color: var(--wa-teal-dark);
+}
+
+/* ==========================================================================
+   Área de Mensagens (Messages History)
+   ========================================================================== */
+.chat-messages {
+  flex: 1;
+  padding: 16px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: var(--wa-bg-chat);
+  /* Padrão visual clássico do WhatsApp */
+  background-image: radial-gradient(#d4cdc3 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Banner de Criptografia / Segurança */
+.security-banner {
+  align-self: center;
+  background-color: #ffeecd;
+  color: #54656f;
+  font-size: 0.75rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* Linhas de Mensagens */
+.message-row {
+  display: flex;
+  width: 100%;
+}
+
+.bot-row {
+  justify-content: flex-start;
+}
+
+.user-row {
+  justify-content: flex-end;
+}
+
+/* Balões de Mensagem */
+.message-bubble {
+  max-width: 78%;
+  padding: 9px 12px 6px 12px;
+  border-radius: var(--radius-bubble);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  font-size: 0.93rem;
+  line-height: 1.45;
+  word-wrap: break-word;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.bot-bubble {
+  background-color: var(--wa-bubble-bot);
+  border-top-left-radius: 0px;
+}
+
+.user-bubble {
+  background-color: var(--wa-bubble-user);
+  border-top-right-radius: 0px;
+}
+
+.message-sender {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--wa-teal-dark);
+  margin-bottom: 4px;
+}
+
+.message-text {
+  color: var(--wa-text-primary);
+  white-space: pre-wrap;
+}
+
+.message-text code {
+  background-color: rgba(0, 0, 0, 0.06);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.88rem;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.msg-time {
+  font-size: 0.7rem;
+  color: var(--wa-time-color);
+}
+
+.msg-ticks {
+  font-size: 0.75rem;
+  color: var(--wa-tick-blue);
+}
+
+/* Chips de Ação Rápida */
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.chip-btn {
+  background-color: #f0f2f5;
+  border: 1px solid #d1d7db;
+  color: var(--wa-teal-dark);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.chip-btn:hover {
+  background-color: var(--wa-teal);
+  color: #ffffff;
+  border-color: var(--wa-teal);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Indicador de Digitação (Typing Indicator)
+   ========================================================================== */
+.typing-indicator {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.typing-bubble {
+  background-color: var(--wa-bubble-bot);
+  padding: 10px 14px;
+  border-radius: var(--radius-bubble);
+  border-top-left-radius: 0px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.typing-bubble span {
+  width: 7px;
+  height: 7px;
+  background-color: #8696a0;
+  border-radius: 50%;
+  animation: typingBounce 1.3s infinite ease-in-out;
+}
+
+.typing-bubble span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-bubble span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.typing-label {
+  font-size: 0.75rem;
+  color: var(--wa-text-secondary);
+  font-style: italic;
+}
+
+@keyframes typingBounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================================================
+   Rodapé e Campo de Digitação (Footer & Input Form)
+   ========================================================================== */
+.chat-footer {
+  background-color: #f0f2f5;
+  padding: 10px 16px;
+  border-top: 1px solid #d1d7db;
+  z-index: 10;
+}
+
+.chat-input-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  color: #54656f;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--wa-teal);
+}
+
+#userInput {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #ffffff;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--wa-text-primary);
+  outline: none;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.06);
+  transition: border-color 0.2s;
+}
+
+#userInput:focus {
+  border-color: #00a884;
+}
+
+.btn-send {
+  background-color: var(--wa-teal);
+  color: #ffffff;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-send:hover {
+  background-color: var(--wa-teal-dark);
+}
+
+.btn-send:active {
+  transform: scale(0.95);
+}
+
+/* Custom Scrollbar */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* Responsividade Mobile */
+@media (max-width: 768px) {
+  body {
+    background-image: none;
+    background-color: var(--wa-bg-chat);
+  }
+
+  .whatsapp-wrapper {
+    height: 100vh;
+    border-radius: 0;
+    max-width: 100%;
+  }
+
+  .header-title {
+    font-size: 0.95rem;
+  }
+
+  .btn-portal-medico span {
+    display: none;
+  }
+
+  .btn-portal-medico {
+    padding: 8px;
+    border-radius: 50%;
+  }
+
+  .message-bubble {
+    max-width: 88%;
+  }
+}

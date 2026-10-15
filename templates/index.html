@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anna - Secretária Virtual | Senai Tech Cardiologia</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Ícones Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}">
+</head>
+<body>
+
+  <!-- Contêiner principal no estilo WhatsApp Web -->
+  <div class="whatsapp-wrapper">
+    <div class="chat-container">
+      
+      <!-- Cabeçalho estilo WhatsApp -->
+      <header class="chat-header">
+        <div class="header-left">
+          <div class="avatar-container">
+            <div class="avatar-badge">
+              <i class="fa-solid fa-user-doctor"></i>
+            </div>
+            <span class="online-indicator" title="Agente Online"></span>
+          </div>
+          
+          <div class="header-info">
+            <h1 class="header-title">Anna - Secretária Virtual | Senai Tech</h1>
+            <p class="header-status">
+              <span class="status-dot"></span>
+              online • Atendimento Inteligente
+            </p>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Atalho direto para o Portal dos Médicos -->
+          <a href="/admin" class="btn-portal-medico" title="Acessar Área dos Médicos">
+            <i class="fa-solid fa-stethoscope"></i>
+            <span>Área dos Médicos</span>
+          </a>
+        </div>
+      </header>
+
+      <!-- Área de histórico de mensagens -->
+      <main class="chat-messages" id="chatMessages">
+        
+        <!-- Banner informativo -->
+        <div class="security-banner">
+          <i class="fa-solid fa-lock"></i>
+          <span>Atendimento com Agente de Inteligência Artificial • Senai Tech</span>
+        </div>
+
+        <!-- Mensagem de boas-vindas da Anna -->
+        <div class="message-row bot-row">
+          <div class="message-bubble bot-bubble">
+            <div class="message-sender">Anna • Secretária Virtual</div>
+            <div class="message-text">
+              Olá! Seja bem-vindo(a) à <strong>Clínica de Cardiologia Senai Tech</strong>! 🫀<br><br>
+              Eu sou a <strong>Anna</strong>, a secretária virtual da clínica. Posso te ajudar a tirar dúvidas, agendar consultas com o <strong>Dr. Clark</strong> ou <strong>Dr. Jorge</strong>, verificar horários disponíveis ou gerenciar seus agendamentos.<br><br>
+              Como posso te ajudar hoje?
+            </div>
+            
+            <!-- Sugestões de Conversa Rápida (Prompts Naturais) -->
+            <div class="quick-chips">
+              <button class="chip-btn" data-action="Olá, gostaria de agendar uma consulta cardiológica">
+                <i class="fa-regular fa-calendar-plus"></i> Agendar consulta
+              </button>
+              <button class="chip-btn" data-action="Quais cardiologistas atendem na clínica?">
+                <i class="fa-solid fa-user-md"></i> Conhecer médicos
+              </button>
+              <button class="chip-btn" data-action="Quais são os horários de atendimento da clínica?">
+                <i class="fa-regular fa-clock"></i> Horários
+              </button>
+              <button class="chip-btn" data-action="Gostaria de cancelar ou consultar um agendamento">
+                <i class="fa-regular fa-calendar-xmark"></i> Gerenciar agendamento
+              </button>
+            </div>
+
+            <div class="message-meta">
+              <span class="msg-time" id="welcomeTime">09:00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indicador de Digitação do Agente -->
+        <div class="typing-indicator" id="typingIndicator">
+          <div class="typing-bubble">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span class="typing-label">Anna está processando...</span>
+        </div>
+
+      </main>
+
+      <!-- Rodapé com campo de digitação estilo WhatsApp -->
+      <footer class="chat-footer">
+        <form class="chat-input-form" id="chatForm">
+          <button type="button" class="btn-icon" id="btnRestart" title="Limpar conversa / Reiniciar histórico">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+          
+          <input 
+            type="text" 
+            id="userInput" 
+            placeholder="Digite sua mensagem para a Anna..." 
+            autocomplete="off" 
+            required 
+            autofocus
+          />
+          
+          <button type="submit" class="btn-send" id="btnSend" title="Enviar mensagem">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </footer>
+
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>

@@ -51,24 +51,52 @@ def seed_sample_data():
             ''', amostras)
             conn.commit()
 
+HORARIOS_EXPEDIENTE = [
+    "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"
+]
+
+def obter_consulta_no_horario(medico, data_str, horario):
+    """
+    Retorna a consulta ativa no médico, data e horário especificados, ou None se vago.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, nome_paciente, cpf, data_nascimento, medico, data, horario, status
+            FROM consultas 
+            WHERE medico = ? AND data = ? AND horario = ? AND status != 'Cancelada'
+        ''', (medico, data_str, horario))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def obter_horarios_disponiveis(medico, data_str):
+    """
+    Retorna a lista de horários livres no expediente para o médico na data informada.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT horario FROM consultas 
+            WHERE medico = ? AND data = ? AND status != 'Cancelada'
+        ''', (medico, data_str))
+        ocupados = {row['horario'] for row in cursor.fetchall()}
+
+    livres = [h for h in HORARIOS_EXPEDIENTE if h not in ocupados]
+    return livres
+
 def verificar_disponibilidade(medico, data_str, horario):
     """
     Verifica se o médico tem vaga no horário e data solicitados.
     Retorna True se estiver livre, False se já ocupado.
     """
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT id FROM consultas 
-            WHERE medico = ? AND data = ? AND horario = ? AND status != 'Cancelada'
-        ''', (medico, data_str, horario))
-        row = cursor.fetchone()
-        return row is None
+    consulta = obter_consulta_no_horario(medico, data_str, horario)
+    return consulta is None
 
-def criar_consulta(nome_paciente, cpf, data_nascimento, medico, data_str, horario):
+def criar_consulta(nome_paciente, cpf, data_nascimento, medico, data_str, horario, session_consulta_id=None):
     """
-    Cria uma nova consulta no sistema.
-    Se o slot já foi reservado de forma preliminar nesta mesma data/hora, atualiza com os dados completos.
+    Cria uma nova consulta no sistema respeitando a regra de negócio:
+    - Se o horário já estiver alocado para outro paciente, BLOQUEIA o agendamento.
+    - Só permite atualização se o registro já pertencer à mesma sessão do paciente.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -80,11 +108,16 @@ def criar_consulta(nome_paciente, cpf, data_nascimento, medico, data_str, horari
 
         if row:
             c_id = row['id']
-            # Atualiza o registro existente com os dados mais recentes do paciente
-            atualizar_dados_consulta(c_id, nome_paciente, cpf, data_nascimento)
-            return c_id, "Consulta atualizada com sucesso!"
+            # Se for a consulta pertencente à própria sessão do usuário em andamento, atualiza
+            if session_consulta_id and session_consulta_id == c_id:
+                atualizar_dados_consulta(c_id, nome_paciente, cpf, data_nascimento)
+                return c_id, "Consulta atualizada com sucesso!"
+            else:
+                # REGRA DE NEGÓCIO: Horário já alocado para outro paciente!
+                print(f"[Database Bloqueio] Conflito de horário! Dr. {medico} em {data_str} {horario} já pertence à consulta #{c_id} ({row['nome_paciente']}).")
+                return None, f"O horário {horario} do dia {data_str} com o {medico} já está alocado para outro paciente."
 
-        # Se o horário está totalmente vago, insere novo registro
+        # Se o horário está vago, insere novo registro
         cursor.execute('''
             INSERT INTO consultas (nome_paciente, cpf, data_nascimento, medico, data, horario, status)
             VALUES (?, ?, ?, ?, ?, ?, 'Agendada')

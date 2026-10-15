@@ -122,33 +122,249 @@ def limpar_resposta_agente(texto: str) -> str:
     texto_limpo = re.sub(r'^Idioma:\s*[^\|\n]+\|\s*Tom:\s*[^\n]+\n*', '', texto, flags=re.IGNORECASE).strip()
     return texto_limpo
 
+# ============================================================================
+# EXTRAÇÃO E VALIDAÇÃO DE DISPONIBILIDADE EM TEMPO REAL NO SQLITE
+# ============================================================================
+def extrair_dados_parciais(texto: str, dados_acumulados: dict = None) -> dict:
+    """Extrai informações parciais de agendamento da mensagem do usuário e do contexto."""
+    res = dict(dados_acumulados) if dados_acumulados else {}
+    hoje = date.today()
+
+    # Médico
+    if re.search(r'\b(Dr\.\s*Clark|Clark)\b', texto, re.IGNORECASE):
+        res["medico"] = "Dr. Clark"
+    elif re.search(r'\b(Dr\.\s*Jorge|Jorge)\b', texto, re.IGNORECASE):
+        res["medico"] = "Dr. Jorge"
+
+    # Data no formato DD/MM/AAAA
+    datas_barras = re.findall(r'\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b', texto)
+    for d, m, a in datas_barras:
+        d_int, m_int, a_int = int(d), int(m), int(a)
+        if a_int >= hoje.year and 1 <= m_int <= 12 and 1 <= d_int <= 31:
+            res["data"] = f"{a_int}-{m_int:02d}-{d_int:02d}"
+        elif a_int < hoje.year and 1 <= m_int <= 12 and 1 <= d_int <= 31:
+            res["data_nascimento"] = f"{d_int:02d}/{m_int:02d}/{a_int}"
+
+    # Data no formato DD/MM (apenas se NÃO for parte de DD/MM/AAAA)
+    if "data" not in res:
+        datas_curtas = re.findall(r'\b(\d{1,2})\/(\d{1,2})(?!\/\d{2,4})\b', texto)
+        for d, m in datas_curtas:
+            d_int, m_int = int(d), int(m)
+            if 1 <= m_int <= 12 and 1 <= d_int <= 31:
+                ano_escolhido = hoje.year
+                try:
+                    dt_check = date(ano_escolhido, m_int, d_int)
+                    if dt_check < hoje:
+                        ano_escolhido += 1
+                    res["data"] = f"{ano_escolhido}-{m_int:02d}-{d_int:02d}"
+                    break
+                except ValueError:
+                    pass
+
+    # Datas relativas ou por extenso
+    if "data" not in res:
+        if re.search(r'\bamanh[aã]\b', texto, re.IGNORECASE):
+            res["data"] = (hoje + timedelta(days=1)).strftime('%Y-%m-%d')
+        elif re.search(r'\bhoje\b', texto, re.IGNORECASE):
+            res["data"] = hoje.strftime('%Y-%m-%d')
+        else:
+            m_ext = re.search(r'(\d{1,2})\s+de\s+([a-zA-Zç]+)(?:\s+de\s+(\d{4}))?', texto, re.IGNORECASE)
+            if m_ext:
+                dia_ext = int(m_ext.group(1))
+                mes_nome = m_ext.group(2).lower()
+                ano_ext = int(m_ext.group(3)) if m_ext.group(3) else hoje.year
+                if mes_nome in MESES_PT:
+                    res["data"] = f"{ano_ext}-{MESES_PT[mes_nome]:02d}-{dia_ext:02d}"
+
+    # Horário (HH:MM, HHh, às HH)
+    m_hora = re.search(r'\b(0?[9]|1[0-7]):([0-5][0-9])\b', texto)
+    if m_hora:
+        res["horario"] = f"{int(m_hora.group(1)):02d}:{m_hora.group(2)}"
+    else:
+        m_hora_h = re.search(r'\b(0?[9]|1[0-7])h(?:([0-5][0-9]))?\b', texto, re.IGNORECASE)
+        if m_hora_h:
+            minuto = m_hora_h.group(2) if m_hora_h.group(2) else "00"
+            res["horario"] = f"{int(m_hora_h.group(1)):02d}:{minuto}"
+        else:
+            m_hora_as = re.search(r'\b[àa]s\s*(0?[9]|1[0-7])\b', texto, re.IGNORECASE)
+            if m_hora_as:
+                res["horario"] = f"{int(m_hora_as.group(1)):02d}:00"
+
+    # CPF
+    m_cpf = re.search(r'(\d{3}\.\d{3}\.\d{3}-\d{2}|\b\d{11}\b)', texto)
+    if m_cpf:
+        nums = re.sub(r'\D', '', m_cpf.group(1))
+        res["cpf"] = f"{nums[:3]}.{nums[3:6]}.{nums[6:9]}-{nums[9:]}"
+
+    return res
+
+def verificar_restricoes_agendamento(session_id: str, mensagem_usuario: str):
+    """
+    Verifica se a tentativa de agendamento viola regras de negócio:
+    - Horário já alocado para outro paciente
+    - Horário no passado
+    - Horário fora do expediente (09:00 às 17:00)
+    """
+    dados_acum = dados_sessao_paciente.get(session_id, {})
+    dados = extrair_dados_parciais(mensagem_usuario, dados_acum)
+
+    # Se ainda não temos médico e data, não há restrição a verificar
+    if "medico" not in dados or "data" not in dados:
+        return None
+
+    medico = dados["medico"]
+    data_str = dados["data"]
+    partes = data_str.split('-')
+    data_br = f"{partes[2]}/{partes[1]}/{partes[0]}"
+    hoje = date.today()
+
+    # 1. Se informou horário específico, checa conflito
+    if "horario" in dados:
+        horario = dados["horario"]
+
+        # Checa se está no passado
+        try:
+            dt_hora = datetime.strptime(f"{data_str} {horario}", "%Y-%m-%d %H:%M")
+            if dt_hora < datetime.now():
+                return {
+                    "status": "passado",
+                    "medico": medico,
+                    "data": data_str,
+                    "data_br": data_br,
+                    "horario": horario
+                }
+        except Exception:
+            pass
+
+        # Checa se já está alocado para outro paciente no SQLite
+        consulta_ocupada = database.obter_consulta_no_horario(medico, data_str, horario)
+        if consulta_ocupada:
+            cid_sessao = dados_acum.get("consulta_id")
+            # Se a consulta encontrada não pertencer à sessão do usuário atual:
+            if not cid_sessao or cid_sessao != consulta_ocupada["id"]:
+                livres = database.obter_horarios_disponiveis(medico, data_str)
+                return {
+                    "status": "ocupado",
+                    "medico": medico,
+                    "data": data_str,
+                    "data_br": data_br,
+                    "horario": horario,
+                    "horarios_livres": livres,
+                    "paciente_alocado": consulta_ocupada.get("nome_paciente")
+                }
+
+    # 2. Se for uma consulta geral sobre disponibilidade de horários
+    termos_busca = ["horarios", "horários", "vagas", "livre", "livres", "disponivel", "disponível", "tem horario", "tem horário"]
+    if any(t in mensagem_usuario.lower() for t in termos_busca) and "horario" not in dados:
+        livres = database.obter_horarios_disponiveis(medico, data_str)
+        return {
+            "status": "consulta_horarios",
+            "medico": medico,
+            "data": data_str,
+            "data_br": data_br,
+            "horarios_livres": livres
+        }
+
+    return None
+
 def processar_mensagem_agente(session_id: str, mensagem_usuario: str) -> str:
     """
     Envia a mensagem do paciente para o Agente Azure 'enzo-coppini' (Anna),
     mantendo o histórico conversacional e sincronizando agendamentos/cancelamentos no SQLite.
+    Garante aplicação rigorosa das regras de negócio de horários alocados.
     """
     try:
         client = obter_cliente_azure()
         conv_id = obter_ou_criar_conversacao(session_id)
 
-        # 1. Envia mensagem para o agente no Azure AI
+        # Atualiza dados conhecidos da sessão com base no texto do usuário
+        if session_id not in dados_sessao_paciente:
+            dados_sessao_paciente[session_id] = {}
+        dados_atualizados = extrair_dados_parciais(mensagem_usuario, dados_sessao_paciente[session_id])
+        dados_sessao_paciente[session_id].update(dados_atualizados)
+
+        # 1. Checa previamente se há restrição de horário ocupado no SQLite
+        restricao = verificar_restricoes_agendamento(session_id, mensagem_usuario)
+        msg_para_ia = mensagem_usuario
+
+        if restricao:
+            if restricao["status"] == "ocupado":
+                medico = restricao["medico"]
+                data_br = restricao["data_br"]
+                horario = restricao["horario"]
+                livres = restricao["horarios_livres"]
+                txt_livres = ", ".join(livres) if livres else "nenhum horário livre nesta data (ofereça outra data)"
+                
+                # Injeta aviso de sistema com dados reais do SQLite para o Agente da Azure
+                msg_para_ia = (
+                    f"[INFORMAÇÃO DO SISTEMA DA CLÍNICA SENAI TECH - BANCO DE DADOS EM TEMPO REAL]\n"
+                    f"O paciente deseja marcar para {data_br} às {horario} com o {medico}.\n"
+                    f"REGRA DE NEGÓCIO RIGOROSA: Este horário JÁ ESTÁ ALOCADO para outro paciente e é PROIBIDO agendar nele!\n"
+                    f"Você DEVE informar educadamente que o horário das {horario} já está ocupado e oferecer as seguintes opções livres para o {medico} nesta data: {txt_livres}.\n"
+                    f"NUNCA solicite dados cadastrais e NUNCA confirme agendamento para horários já ocupados!\n"
+                    f"[FIM DA INFORMAÇÃO]\n\n"
+                    f"Mensagem do paciente: {mensagem_usuario}"
+                )
+            elif restricao["status"] == "consulta_horarios":
+                medico = restricao["medico"]
+                data_br = restricao["data_br"]
+                livres = restricao["horarios_livres"]
+                txt_livres = ", ".join(livres) if livres else "todos os horários estão ocupados nesta data"
+                msg_para_ia = (
+                    f"[INFORMAÇÃO DO SISTEMA - HORÁRIOS DISPONÍVEIS]: Os horários vagos para o {medico} no dia {data_br} são: {txt_livres}.\n\n"
+                    f"Mensagem do paciente: {mensagem_usuario}"
+                )
+            elif restricao["status"] == "passado":
+                msg_para_ia = (
+                    f"[INFORMAÇÃO DO SISTEMA]: O paciente pediu uma data ou horário que já passou ({restricao['data_br']} às {restricao['horario']}). "
+                    f"Informe gentilmente que não é possível agendar no passado e peça para escolher uma data futura.\n\n"
+                    f"Mensagem do paciente: {mensagem_usuario}"
+                )
+
+        # 2. Envia mensagem para o agente no Azure AI
         response = client.responses.create(
             conversation=conv_id,
-            input=[{"role": "user", "content": mensagem_usuario}]
+            input=[{"role": "user", "content": msg_para_ia}]
         )
 
         texto_agente = response.output_text or ""
         resposta_formatada = limpar_resposta_agente(texto_agente)
 
-        # 2. Sincroniza cancelamento primeiro (caso seja solicitação de cancelamento)
+        # 3. Blindagem determinística: se o horário estava ocupado, garante que a resposta nunca aceite o horário ocupado
+        if restricao and restricao["status"] == "ocupado":
+            medico = restricao["medico"]
+            data_br = restricao["data_br"]
+            horario = restricao["horario"]
+            livres = restricao["horarios_livres"]
+            txt_livres = ", ".join(livres) if livres else "Infelizmente todos os horários deste dia já foram preenchidos. Gostaria de verificar outra data?"
+
+            # Se a IA alucinar e pedir dados ou disser que agendou mesmo com o aviso:
+            pediu_dados = any(k in resposta_formatada.lower() for k in ["cpf", "nascimento"]) and "nome" in resposta_formatada.lower()
+            confirmou = any(k in resposta_formatada.lower() for k in ["confirmad", "agendad", "marcad"]) and horario in resposta_formatada
+
+            if pediu_dados or confirmou:
+                # Remove o horário ocupado da sessão para não insistir
+                if "horario" in dados_sessao_paciente[session_id]:
+                    del dados_sessao_paciente[session_id]["horario"]
+
+                resposta_formatada = (
+                    f"Olá! Consultei a nossa agenda e o horário das **{horario}** no dia **{data_br}** com o **{medico}** "
+                    f"já está alocado para outro paciente.\n\n"
+                    f"Para melhor atendê-lo(a), os horários disponíveis para o **{medico}** nesta data são:\n"
+                    f"🕒 **{txt_livres}**\n\n"
+                    f"Qual desses horários você prefere?"
+                )
+
+        # 4. Sincroniza cancelamento primeiro (caso seja solicitação de cancelamento)
         msg_canc = tentar_sincronizar_cancelamento(session_id, mensagem_usuario, resposta_formatada)
         if msg_canc:
             resposta_formatada += f"\n\n{msg_canc}"
         else:
-            # 3. Só tenta sincronizar novo agendamento se NÃO for cancelamento
-            msg_extra = tentar_sincronizar_agendamento(session_id, mensagem_usuario, resposta_formatada)
-            if msg_extra:
-                resposta_formatada += f"\n\n{msg_extra}"
+            # 5. Só tenta sincronizar novo agendamento se NÃO for cancelamento e NÃO houver conflito de horário ocupado
+            if not (restricao and restricao["status"] in ["ocupado", "passado"]):
+                msg_extra = tentar_sincronizar_agendamento(session_id, mensagem_usuario, resposta_formatada)
+                if msg_extra:
+                    resposta_formatada += f"\n\n{msg_extra}"
 
         return resposta_formatada
 
@@ -248,85 +464,38 @@ def tentar_sincronizar_cancelamento(session_id: str, msg_usuario: str, resposta_
 def tentar_sincronizar_agendamento(session_id: str, msg_usuario: str, resposta_agente: str):
     """
     Extrai informações acumuladas da conversa e salva a consulta no SQLite
-    para que apareça imediatamente no Painel dos Médicos (/admin).
+    respeitando estritamente a alocação e bloqueio de horários já preenchidos.
     """
     if session_id not in dados_sessao_paciente:
         dados_sessao_paciente[session_id] = {}
 
     dados = dados_sessao_paciente[session_id]
     texto_total = f"{msg_usuario}\n{resposta_agente}"
-    hoje = date.today()
 
-    # 1. Médico (Dr. Clark ou Dr. Jorge)
-    m_med = re.search(r'\b(Dr\.\s*Clark|Dr\.\s*Jorge|Clark|Jorge)\b', texto_total, re.IGNORECASE)
-    if m_med:
-        val = m_med.group(1).lower()
-        dados["medico"] = "Dr. Clark" if "clark" in val else "Dr. Jorge"
+    # Enriquece os dados com tudo que foi dito
+    dados.update(extrair_dados_parciais(texto_total, dados))
 
-    # 2. Datas no formato numérico DD/MM/AAAA (ex: 18/10/2026, 14/08/2006)
-    datas_barras = re.findall(r'\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b', texto_total)
-    for d, m, a in datas_barras:
-        d_int, m_int, a_int = int(d), int(m), int(a)
-        if a_int >= hoje.year and 1 <= m_int <= 12 and 1 <= d_int <= 31:
-            dados["data"] = f"{a_int}-{m_int:02d}-{d_int:02d}"
-        elif a_int < hoje.year and 1 <= m_int <= 12 and 1 <= d_int <= 31:
-            dados["data_nascimento"] = f"{d_int:02d}/{m_int:02d}/{a_int}"
-
-    # Datas relativas ou por extenso
-    if "data" not in dados:
-        if re.search(r'\bamanh[aã]\b', texto_total, re.IGNORECASE):
-            dados["data"] = (hoje + timedelta(days=1)).strftime('%Y-%m-%d')
-        elif re.search(r'\bhoje\b', texto_total, re.IGNORECASE):
-            dados["data"] = hoje.strftime('%Y-%m-%d')
-        else:
-            m_ext = re.search(r'(\d{1,2})\s+de\s+([a-zA-Zç]+)(?:\s+de\s+(\d{4}))?', texto_total, re.IGNORECASE)
-            if m_ext:
-                dia_ext = int(m_ext.group(1))
-                mes_nome = m_ext.group(2).lower()
-                ano_ext = int(m_ext.group(3)) if m_ext.group(3) else hoje.year
-                if mes_nome in MESES_PT:
-                    dados["data"] = f"{ano_ext}-{MESES_PT[mes_nome]:02d}-{dia_ext:02d}"
-
-    # 3. Horários no formato HH:MM ou HHh (ex: 10:00, 14h, às 10)
-    m_hora = re.search(r'\b(0?[9]|1[0-7]):([0-5][0-9])\b', texto_total)
-    if m_hora:
-        dados["horario"] = f"{int(m_hora.group(1)):02d}:{m_hora.group(2)}"
-    else:
-        m_hora_h = re.search(r'\b(0?[9]|1[0-7])h(?:([0-5][0-9]))?\b', texto_total, re.IGNORECASE)
-        if m_hora_h:
-            minuto = m_hora_h.group(2) if m_hora_h.group(2) else "00"
-            dados["horario"] = f"{int(m_hora_h.group(1)):02d}:{minuto}"
-
-    # 4. CPF do Paciente (11 dígitos ou XXX.XXX.XXX-XX)
-    m_cpf = re.search(r'(\d{3}\.\d{3}\.\d{3}-\d{2}|\b\d{11}\b)', msg_usuario)
-    if m_cpf:
-        nums = re.sub(r'\D', '', m_cpf.group(1))
-        dados["cpf"] = f"{nums[:3]}.{nums[3:6]}.{nums[6:9]}-{nums[9:]}"
-
-    # 5. Nome do Paciente (com filtro anti-obrigado)
+    # Nome do Paciente (com filtro anti-obrigado)
     m_nome_user = re.search(r'(?:meu nome [eé]|me chamo|nome:\s*|sou o|sou a)\s*([A-Za-zÀ-ÖØ-öø-ÿ\s]{3,35})', msg_usuario, re.IGNORECASE)
     if m_nome_user:
         nome_c = m_nome_user.group(1).split(',')[0].strip().title()
         if nome_c.lower() not in PALAVRAS_INVALIDAS_NOME:
             dados["nome_paciente"] = nome_c
     elif "nome_paciente" not in dados or dados["nome_paciente"].lower() in PALAVRAS_INVALIDAS_NOME:
-        # Tenta da resposta da Anna (ex: "Perfeito, Enzo Coppini" ou "Claro, Enzo")
         m_nome_agente = re.search(r'(?:Perfeito|Ol[aá]|Claro|Certo),?\s*([A-Za-zÀ-ÖØ-öø-ÿ\s]{3,35})[.,!]', resposta_agente, re.IGNORECASE)
         if m_nome_agente:
             nome_c = m_nome_agente.group(1).strip().title()
             if nome_c.lower() not in PALAVRAS_INVALIDAS_NOME:
                 dados["nome_paciente"] = nome_c
 
-    # 6. Indicador de Confirmação pelo Agente
+    # Indicador de Confirmação pelo Agente
     confirmado = bool(re.search(
         r'(?:foi agendada|agendada para o dia|agendamento.*ficou|consulta.*confirmada|confirmad[oa]|recebi seus dados|agendamento.*encaminhado)',
         resposta_agente,
         re.IGNORECASE
     ))
 
-    # ========================================================================
-    # GRAVAÇÃO / ATUALIZAÇÃO NO BANCO SQLITE (clinica.db)
-    # ========================================================================
+    # Gravação / Atualização no banco SQLite respeitando alocação
     if "medico" in dados and "data" in dados and "horario" in dados:
         nome = dados.get("nome_paciente", "Paciente Agendado")
         if nome.lower() in PALAVRAS_INVALIDAS_NOME:
@@ -337,11 +506,13 @@ def tentar_sincronizar_agendamento(session_id: str, msg_usuario: str, resposta_a
         medico = dados["medico"]
         data_c = dados["data"]
         horario_c = dados["horario"]
+        sessao_cid = dados.get("consulta_id")
 
-        # Se ainda não foi gravada no banco:
-        if "consulta_id" not in dados:
+        if sessao_cid is None:
             if confirmado or (nome != "Paciente Agendado" and cpf != "000.000.000-00"):
-                consulta_id, msg = database.criar_consulta(nome, cpf, data_nasc, medico, data_c, horario_c)
+                consulta_id, msg = database.criar_consulta(
+                    nome, cpf, data_nasc, medico, data_c, horario_c, session_consulta_id=sessao_cid
+                )
                 if consulta_id:
                     dados["consulta_id"] = consulta_id
                     partes = data_c.split('-')
@@ -349,11 +520,10 @@ def tentar_sincronizar_agendamento(session_id: str, msg_usuario: str, resposta_a
                     print(f"[SQLite] SUCESSO: Consulta #{consulta_id} gravada no banco para {medico} em {data_c} às {horario_c} ({nome})")
                     return f"✅ *[Sistema Senai Tech: Consulta #{consulta_id} registrada com sucesso no banco de dados para o {medico} em {data_br} às {horario_c}. Paciente: {nome}]*"
                 else:
-                    print(f"[SQLite Aviso] Não foi possível criar consulta: {msg}")
+                    print(f"[SQLite Bloqueio]: Não foi possível criar consulta: {msg}")
         else:
-            # Se já foi gravada, atualiza com os dados enriquecidos
-            consulta_id = dados["consulta_id"]
-            database.atualizar_dados_consulta(consulta_id, nome, cpf, data_nasc)
-            print(f"[SQLite] Consulta #{consulta_id} atualizada com dados do paciente: {nome}, CPF: {cpf}, Nasc: {data_nasc}")
+            # Se já pertence à sessão, atualiza os dados cadastrais
+            database.atualizar_dados_consulta(sessao_cid, nome, cpf, data_nasc)
+            print(f"[SQLite] Consulta #{sessao_cid} atualizada com dados do paciente: {nome}, CPF: {cpf}, Nasc: {data_nasc}")
 
     return None
